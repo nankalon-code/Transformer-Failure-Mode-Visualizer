@@ -49,7 +49,7 @@ export default function Panel5() {
     let A2 = softmaxRows(maskedLogits);
     
     // Text labels for axes
-    let labels = ["Harry (0)", "Potter (1)", "and (2)", "Harry (3)", "[NEXT] (4)"];
+    let labels = ["Token A", "Token B", "Token C", "Token A", "[NEXT]"];
     
     return { A2, labels };
   }, [coupling]);
@@ -63,10 +63,10 @@ export default function Panel5() {
             <input type="range" min="0" max="1" step="0.05" value={coupling} onChange={e => setCoupling(parseFloat(e.target.value))} />
           </div>
           <div style={{color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.6', marginTop: '20px'}}>
-            <strong>Sequence:</strong> <code>[Harry, Potter, and, Harry, ?]</code><br/><br/>
+            <strong>Sequence:</strong> <code>[Token A, Token B, Token C, Token A, ?]</code><br/><br/>
             <strong>Layer 1</strong> extracts the previous token. <br/>
             <strong>Layer 2</strong> compares its current token to Layer 1's output. <br/><br/>
-            When coupling is high, the <strong>OV-K</strong> circuit operates perfectly. Look at the last row (predicting after the second 'Harry'). The attention spikes precisely on 'Potter' — this is the mathematical origin of <strong>in-context learning</strong>.
+            When coupling is high, the <strong>OV-K</strong> circuit operates perfectly. Look at the last row (predicting after the second 'Harry'). The attention spikes precisely on 'Token B' — this is the mathematical origin of <strong>in-context learning</strong>.
           </div>
         </div>
       </div>

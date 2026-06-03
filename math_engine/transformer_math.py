@@ -16,8 +16,9 @@ def entropy_rows(A):
 
 # --- PANEL 1: Entropy Collapse ---
 def attention_entropy_collapse(seq_len=50, d_k=64, q_norm=1.0, k_norm=1.0, tau=1.0):
-    Q = normalize_rows(np.random.randn(seq_len, d_k), q_norm)
-    K = normalize_rows(np.random.randn(seq_len, d_k), k_norm)
+    base_signal = np.eye(seq_len)[:, :d_k] * 2.0
+    Q = normalize_rows(np.random.randn(seq_len, d_k) + base_signal, q_norm)
+    K = normalize_rows(np.random.randn(seq_len, d_k) + base_signal, k_norm)
     logits = Q @ K.T
     scaled_logits = logits / (np.sqrt(d_k) * tau)
     A = softmax_rows(scaled_logits)
@@ -45,7 +46,9 @@ def rope_sim(seq_len=200, d_model=64):
 def alibi_sim(seq_len=200, m_slope=0.5):
     m = np.arange(seq_len)[:, np.newaxis]
     n = np.arange(seq_len)
-    return -m_slope * np.abs(m - n)
+    bias = -m_slope * np.abs(m - n)
+    base_qk = np.random.randn(seq_len, seq_len) * 0.1 + np.eye(seq_len) * 5.0
+    return base_qk + bias
 
 # --- PANEL 3: Head Redundancy ---
 def js_divergence(p, q):
@@ -114,7 +117,7 @@ def residual_saturation_sim(num_layers=24, dim=128, ln_type='Pre-LN', f_scale=1.
 
 # --- PANEL 5: Induction Heads ---
 def induction_heads_sim(coupling=0.9, n=5, d_model=16):
-    # Sequence: [Harry, Potter, and, Harry, _]
+    # Sequence: [Token A, Token B, Token C, Token A, _]
     seq = np.array([0, 1, 2, 0, 3]) 
     E_vocab = np.random.randn(4, d_model)
     E = E_vocab[seq]

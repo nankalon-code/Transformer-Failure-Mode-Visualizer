@@ -11,8 +11,12 @@ export default function Panel1() {
   const [seqLen, setSeqLen] = useState(50);
 
   const data = useMemo(() => {
-    let Q = normalizeRows(randomMatrix(seqLen, dk), qNorm);
-    let K = normalizeRows(randomMatrix(seqLen, dk), kNorm);
+    // Add a base block-diagonal signal so attention isn't just noise
+    let baseSignal = Array.from({length: seqLen}, (_, i) => Array.from({length: dk}, (_, j) => (i === j % seqLen) ? 2.0 : 0.0));
+    let Q_raw = randomMatrix(seqLen, dk).map((r, i) => r.map((v, j) => v + baseSignal[i][j] * (seqLen/dk)));
+    let Q = normalizeRows(Q_raw, qNorm);
+    let K_raw = randomMatrix(seqLen, dk).map((r, i) => r.map((v, j) => v + baseSignal[i][j] * (seqLen/dk)));
+    let K = normalizeRows(K_raw, kNorm);
     let logits = matMul(Q, transpose(K));
     let scaledLogits = logits.map(row => row.map(x => x / (Math.sqrt(dk) * tau)));
     let A = softmaxRows(scaledLogits);
@@ -61,7 +65,7 @@ export default function Panel1() {
             <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#ef4444'}}>{"\\nabla_{z_i} a_i \\approx a_i(1 - a_i)"}</div>
             <Plot
               data={[{ z: data.gradMag, type: 'heatmap', colorscale: 'Reds', zmin: 0, zmax: 0.25 }] as any}
-              layout={{ title: 'Gradient Vanishing Heatmap', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'}, margin: {t:40,l:30,r:30,b:30} } as any}
+              layout={{ title: 'Jacobian Diagonal (Gradient Flow)', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'}, margin: {t:40,l:30,r:30,b:30} } as any}
               useResizeHandler={true} style={{width: '100%', height: '260px'}}
             />
           </div>

@@ -34,8 +34,12 @@ export default function Panel2() {
       }
     } else if (encType === 'ALiBi') {
       let mSlope = 0.5;
+      // ALiBi adds bias to the base QK similarity. We simulate a base identity-like QK similarity.
       for(let m=0; m<seqLen; m++){
-        for(let n=0; n<seqLen; n++) sim[m][n] = -mSlope * Math.abs(m-n);
+        for(let n=0; n<seqLen; n++) {
+           let baseQK = (m === n) ? 5.0 : Math.random();
+           sim[m][n] = baseQK - mSlope * Math.abs(m-n);
+        }
       }
     }
     return sim;
@@ -76,7 +80,7 @@ export default function Panel2() {
           <Plot
             data={[{ z: simMatrix, type: 'heatmap', colorscale: 'RdBu' }] as any}
             layout={{ 
-              title: `${encType} Positional Similarity Matrix`, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'},
+              title: encType === 'ALiBi' ? 'ALiBi Attention Logits (Base QK + Bias)' : `${encType} Positional Similarity Matrix`, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'},
               shapes: [
                 {type: 'line', x0: trainLen, x1: trainLen, y0: 0, y1: seqLen, line: {color: 'rgba(239,68,68,0.8)', dash: 'dash', width: 2}},
                 {type: 'line', y0: trainLen, y1: trainLen, x0: 0, x1: seqLen, line: {color: 'rgba(239,68,68,0.8)', dash: 'dash', width: 2}}

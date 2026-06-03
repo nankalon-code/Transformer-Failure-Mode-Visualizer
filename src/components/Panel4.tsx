@@ -32,13 +32,13 @@ export default function Panel4() {
         let {mean, std} = getStats(x);
         let ln_x = x.map(val => (val - mean) / (std + 1e-5));
         
-        let f_raw = Array.from({length: dim}, () => Math.random() * 2 - 1);
+        let f_raw = Array.from({length: dim}, (_, idx) => (Math.random() * 2 - 1) + target_col[idx] * (l / numLayers) * 5.0);
         let nF = norm(f_raw);
         f = f_raw.map(val => (val / nF) * fScale * Math.sqrt(dim)); // F output variance scales with fScale
         x = x.map((val, i) => val + f[i]);
       } else if (lnType === 'Post-LN') {
         // Post-LN: LN(x + F(x))
-        let f_raw = Array.from({length: dim}, () => Math.random() * 2 - 1);
+        let f_raw = Array.from({length: dim}, (_, idx) => (Math.random() * 2 - 1) + target_col[idx] * (l / numLayers) * 5.0);
         let nF = norm(f_raw);
         let x_norm = norm(x);
         f = f_raw.map(val => (val / nF) * fScale * x_norm); 
@@ -46,7 +46,7 @@ export default function Panel4() {
         let {mean, std} = getStats(unnorm_x);
         x = unnorm_x.map(val => (val - mean) / (std + 1e-5));
       } else {
-        let f_raw = Array.from({length: dim}, () => Math.random() * 2 - 1);
+        let f_raw = Array.from({length: dim}, (_, idx) => (Math.random() * 2 - 1) + target_col[idx] * (l / numLayers) * 5.0);
         let nF = norm(f_raw);
         let x_norm = norm(x);
         f = f_raw.map(val => (val / nF) * fScale * x_norm);
@@ -56,7 +56,13 @@ export default function Panel4() {
     }
     xHistory.push([...x]);
 
+    
+    // Logit Lens: W_U is random, but let's make a specific target token align with the final residual stream
     let W_U = randomMatrix(dim, 500).map(row => row.map(v => v / Math.sqrt(dim))); 
+    
+    // We want the model to successfully predict token 42 in the end, so we slowly bias the residual stream towards W_U's 42nd column
+    let target_col = W_U.map(row => row[42]);
+ 
     let logitsHistory = xHistory.map(xl => matMul([xl], W_U)[0]);
     let finalLogits = logitsHistory[logitsHistory.length - 1];
     let finalPred = finalLogits.indexOf(Math.max(...finalLogits));
