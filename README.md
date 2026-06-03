@@ -9,20 +9,27 @@ An interactive visualizer designed to systematically study the failure modes of 
 4. **Residual Stream Saturation & Logit Lens**: Simulate residual norm growth across layers to find the exact crossover point where Layer Normalization discards early signal, and watch the Logit Lens projection stabilize.
 5. **Induction Heads**: Analyze the OV-K composition circuit mathematically to see how 2-layer transformers perform in-context learning.
 
-## Stack
-- Python
-- Streamlit
-- NumPy & SciPy
-- Plotly
+## Tech Stack
+- **React / Next.js ready** (Vite build)
+- **TypeScript**
+- **Plotly.js** for high-performance interactive visualizations
+- **Raw Math**: Custom JS implementations of dot products, JS-divergence, and softmax gradients without heavy ML frameworks.
 
 ## Running Locally
 
 1. Install dependencies:
 ```bash
-pip install -r requirements.txt
+npm install
 ```
 
 2. Run the application:
 ```bash
-streamlit run app.py
+npm run dev
 ```
+
+## Deployment (Vercel)
+
+This repository is built as a standard React single-page application using Vite. It is instantly deployable on Vercel:
+1. Connect this repository to your Vercel account.
+2. The framework preset should automatically be detected as **Vite**.
+3. Deploy! The Build command will automatically be `npm run build` and output directory `dist`.
