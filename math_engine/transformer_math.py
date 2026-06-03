@@ -82,28 +82,30 @@ def head_redundancy_sim(seq_len=50, d_model=64, d_k=32, num_heads=8, weight_corr
 
 # --- PANEL 4: Residual Saturation ---
 def residual_saturation_sim(num_layers=24, dim=128, ln_type='Pre-LN', f_scale=1.0):
-    x = np.random.randn(dim)
+    x = np.random.randn(dim) # Initial embedding
     norms_X = []
     norms_F = []
     
     for l in range(num_layers):
         norms_X.append(np.linalg.norm(x))
-        nX = np.linalg.norm(x)
-        
-        f = np.random.randn(dim)
-        nF = np.linalg.norm(f)
         
         if ln_type == 'Pre-LN':
-            f = (f / nF) * f_scale
+            # Pre-LN: x_{l+1} = x_l + F(LN(x_l))
+            # 1. LN(x)
+            ln_x = (x - np.mean(x)) / (np.std(x) + 1e-5)
+            # 2. F(LN(x))
+            f = np.random.randn(dim) * f_scale 
             x = x + f
         elif ln_type == 'Post-LN':
-            f = (f / nF) * f_scale * (nX if l > 0 else 1.0)
-            x = x + f
-            mean = np.mean(x)
-            std = np.std(x)
-            x = (x - mean) / (std + 1e-5)
+            # Post-LN: x_{l+1} = LN(x_l + F(x_l))
+            # 1. F(x) scales with x's magnitude roughly
+            f = np.random.randn(dim) * f_scale * (np.linalg.norm(x) / np.sqrt(dim))
+            unnorm_x = x + f
+            # 2. LN(x + F(x))
+            x = (unnorm_x - np.mean(unnorm_x)) / (np.std(unnorm_x) + 1e-5)
         else: # No-LN
-            f = (f / nF) * f_scale
+            # x_{l+1} = x_l + F(x_l)
+            f = np.random.randn(dim) * f_scale * (np.linalg.norm(x) / np.sqrt(dim))
             x = x + f
             
         norms_F.append(np.linalg.norm(f))
