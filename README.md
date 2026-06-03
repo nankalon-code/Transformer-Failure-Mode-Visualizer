@@ -3,6 +3,8 @@
 
 An interactive visualizer designed to systematically study the failure modes of the Transformer architecture through raw mathematics. Most educational resources show when transformers work; this visualizer demonstrates when and why they break down.
 
+![Panel 1: Attention Entropy Collapse](public/screenshots/panel1.png)
+
 ## Mathematical Regimes Explored
 
 ### 1. Attention Entropy Collapse
@@ -29,6 +31,8 @@ Tracks the $L_2$ norm evolution of the residual stream under different LayerNorm
 ### 5. Induction Heads (In-Context Learning)
 Visualizes the $W_K^{(2)} W_{OV}^{(1)}$ composition circuit responsible for copying previous patterns.
 - Simulates how a previous-token head in Layer 1 is composed with an induction head in Layer 2 to produce true in-context learning, and how parameter uncoupling breaks this capacity.
+
+![Panel 5: Induction Heads Simulation](public/screenshots/panel5.png)
 
 ## Tech Stack & Architecture
 - **Frontend Engine**: React, Vite, TypeScript
