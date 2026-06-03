@@ -8,30 +8,33 @@ st.set_page_config(page_title="Transformer Failure Mode Visualizer", layout="wid
 
 st.title("Transformer Failure Mode Visualizer")
 st.markdown("""
-This interactive visualizer explores four primary failure regimes of the transformer architecture:
-1. **Attention Entropy Collapse**
+This interactive visualizer explores five primary mathematical mechanisms and failure regimes of the transformer architecture:
+1. **Attention Entropy Collapse** & Gradient Vanishing
 2. **Positional Encoding Breakdown**
 3. **Attention Head Redundancy**
-4. **Residual Stream Saturation**
+4. **Residual Stream Saturation** & The Logit Lens
+5. **Induction Heads** & In-Context Learning
 """)
 
 tabs = st.tabs([
     "1. Entropy Collapse",
     "2. Positional Breakdown",
     "3. Head Redundancy",
-    "4. Residual Saturation"
+    "4. Residual Saturation",
+    "5. Induction Heads"
 ])
 
 # Panel 1: Attention Entropy Collapse
 with tabs[0]:
-    st.header("Attention Entropy Collapse")
-    st.markdown(r"**Equation:** $a_{ij} = \text{softmax}(q_i \cdot k_j / \sqrt{d_k})$")
+    st.header("Attention Entropy Collapse & Gradient Vanishing")
+    st.markdown(r"**Equation:** $a_{ij} = \text{softmax}\left(\frac{q_i \cdot k_j}{\tau \sqrt{d_k}}\right)$")
     
-    col1, col2 = st.columns([1, 3])
+    col1, col2 = st.columns([1, 4])
     with col1:
         q_norm = st.slider("Query Norm ||q||", min_value=0.1, max_value=50.0, value=1.0, step=0.1)
         k_norm = st.slider("Key Norm ||k||", min_value=0.1, max_value=50.0, value=1.0, step=0.1)
         d_k = st.slider("Dimension (d_k)", min_value=1, max_value=512, value=64, step=1)
+        tau = st.slider("Temperature (\u03c4)", min_value=0.1, max_value=5.0, value=1.0, step=0.1)
         seq_len_1 = st.slider("Sequence Length", min_value=10, max_value=200, value=50, step=10)
         
     with col2:
@@ -44,7 +47,7 @@ with tabs[0]:
         K = K / np.linalg.norm(K, axis=1, keepdims=True) * k_norm
         
         logits = Q @ K.T
-        scaled_logits = logits / np.sqrt(d_k)
+        scaled_logits = logits / (np.sqrt(d_k) * tau)
         
         # Softmax
         exp_logits = np.exp(scaled_logits - np.max(scaled_logits, axis=1, keepdims=True))
@@ -53,13 +56,25 @@ with tabs[0]:
         # Entropy
         entropy = -np.sum(A * np.log(A + 1e-12), axis=1)
         
-        st.subheader("Attention Matrix (Softmax Surface)")
-        fig1 = px.imshow(A, color_continuous_scale='Viridis', title="Attention Weights")
-        st.plotly_chart(fig1, use_container_width=True)
+        # Gradient Magnitude (Diagonal of Jacobian)
+        grad_mag = A * (1 - A)
+        
+        col_plot1, col_plot2 = st.columns(2)
+        with col_plot1:
+            st.subheader("Attention Matrix (Softmax Surface)")
+            fig1 = px.imshow(A, color_continuous_scale='Viridis', title="Attention Weights")
+            st.plotly_chart(fig1, use_container_width=True)
+            
+        with col_plot2:
+            st.subheader("Gradient Vanishing Heatmap")
+            fig_grad = px.imshow(grad_mag, color_continuous_scale='Reds', zmin=0, zmax=0.25, 
+                                 title="Local Gradient Magnitude: a_i(1 - a_i)")
+            st.plotly_chart(fig_grad, use_container_width=True)
         
         st.subheader("Attention Entropy per Position")
         fig2 = px.line(y=entropy, labels={'x': 'Position', 'y': 'Entropy'}, title="Entropy")
         fig2.add_hline(y=np.log(seq_len_1), line_dash="dash", annotation_text="Max Entropy (Uniform)")
+        fig2.update_layout(yaxis_range=[0, np.log(seq_len_1) * 1.1])
         st.plotly_chart(fig2, use_container_width=True)
 
 # Panel 2: Positional Encoding Breakdown
@@ -143,7 +158,7 @@ with tabs[2]:
 
 # Panel 4: Residual Stream Saturation
 with tabs[3]:
-    st.header("Residual Stream Saturation")
+    st.header("Residual Stream Saturation & The Logit Lens")
     st.markdown(r"**Equation:** $x^{(l+1)} = x^{(l)} + F^{(l)}(x^{(l)})$")
     
     col1, col2 = st.columns([1, 3])
@@ -159,8 +174,10 @@ with tabs[3]:
         
         norms_x = []
         norms_f = []
+        x_history = []
         
         for l in range(num_layers):
+            x_history.append(np.copy(x))
             norms_x.append(np.linalg.norm(x))
             
             if ln_type == "Pre-LN":
@@ -179,8 +196,58 @@ with tabs[3]:
                 
             norms_f.append(np.linalg.norm(f))
             
-        fig5 = go.Figure()
-        fig5.add_trace(go.Scatter(y=norms_x, mode='lines+markers', name='Residual Stream Norm ||x||'))
-        fig5.add_trace(go.Scatter(y=norms_f, mode='lines+markers', name='Layer Contribution Norm ||F(x)||'))
-        fig5.update_layout(title="Residual Norm Growth Across Layers", xaxis_title="Layer", yaxis_title="Norm")
-        st.plotly_chart(fig5, use_container_width=True)
+        x_history.append(np.copy(x)) # final state
+        
+        col_plot3, col_plot4 = st.columns(2)
+        with col_plot3:
+            fig5 = go.Figure()
+            fig5.add_trace(go.Scatter(y=norms_x, mode='lines+markers', name='Residual Stream Norm ||x||'))
+            fig5.add_trace(go.Scatter(y=norms_f, mode='lines+markers', name='Layer Contribution Norm ||F(x)||'))
+            fig5.update_layout(title="Residual Norm Growth Across Layers", xaxis_title="Layer", yaxis_title="Norm")
+            st.plotly_chart(fig5, use_container_width=True)
+            
+        with col_plot4:
+            # Logit Lens Simulation
+            vocab_size = 1000
+            np.random.seed(42)
+            W_U = np.random.randn(dim, vocab_size) / np.sqrt(dim)
+            
+            logits_history = [x_l @ W_U for x_l in x_history]
+            final_pred = np.argmax(logits_history[-1])
+            
+            prob_of_final = []
+            for l_logits in logits_history:
+                exp_l = np.exp(l_logits - np.max(l_logits))
+                probs = exp_l / np.sum(exp_l)
+                prob_of_final.append(probs[final_pred])
+                
+            fig6 = go.Figure()
+            fig6.add_trace(go.Scatter(y=prob_of_final, mode='lines+markers', name='P(Final Token)', marker_color='purple'))
+            fig6.update_layout(title="Logit Lens: When does prediction stabilize?", xaxis_title="Layer", yaxis_title="Probability of Final Prediction")
+            st.plotly_chart(fig6, use_container_width=True)
+
+# Panel 5: Induction Heads
+with tabs[4]:
+    st.header("Induction Heads (In-Context Learning)")
+    st.markdown(r"**Mechanism:** Layer 1 attends to the *previous* token. Layer 2 composes with Layer 1 to match the current token and predict the next. This requires the **OV-K Composition Circuit** $W_K^{(2)} W_O^{(1)} W_V^{(1)}$ to act as a pseudo-identity mapping.")
+    
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        coupling = st.slider("Circuit Coupling Strength", min_value=0.0, max_value=1.0, value=0.8,
+                             help="1.0 = Perfect copying. 0.0 = Random communication between layers.")
+        
+    with col2:
+        d_head = 32
+        np.random.seed(42)
+        # Perfect copying means the composition matrix is roughly identity
+        W_OV_K = coupling * np.eye(d_head) + (1 - coupling) * np.random.randn(d_head, d_head) / np.sqrt(d_head)
+        
+        fig7 = px.imshow(W_OV_K, color_continuous_scale='RdBu', color_continuous_midpoint=0, 
+                         title="OV-K Composition Matrix (Layer 1 -> Layer 2)")
+        st.plotly_chart(fig7, use_container_width=True)
+        
+        st.info(
+            "**How to read this:** When the diagonal is strong (high coupling), Layer 2's Keys directly read the Values extracted by Layer 1. "
+            "Since Layer 1 attends to the *previous* token, Layer 2 effectively asks: "
+            "*'Have I seen the current token before? If so, what came after it?'* — solving in-context learning mathematically."
+        )
