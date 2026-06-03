@@ -1,5 +1,5 @@
 # Transformer Failure Mode Visualizer
-**Live Demo:** [Deploy with Vercel](https://vercel.com/new) (Zero-config Vite preset)
+**Live Demo:** will be up soon
 
 An interactive visualizer designed to systematically study the failure modes of the Transformer architecture through raw mathematics. Most educational resources show when transformers work; this visualizer demonstrates when and why they break down.
 
