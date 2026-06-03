@@ -1,5 +1,5 @@
 # Transformer Failure Mode Visualizer
-**Live Demo:** [transformer-failure-visualizer.vercel.app](https://transformer-failure-visualizer.vercel.app/) *(Placeholder)*
+**Live Demo:** will be up soon
 
 **Topics:** `transformers`, `mechanistic-interpretability`, `deep-learning`, `visualization`, `attention-mechanism`
 
