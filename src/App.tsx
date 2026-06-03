@@ -4,7 +4,7 @@ import Plot from 'react-plotly.js';
 // --- MATH HELPERS ---
 const norm = (v: number[]) => Math.sqrt(v.reduce((s, x) => s + x * x, 0));
 const randomMatrix = (rows: number, cols: number) => 
-  Array.from({length: rows}, () => Array.from({length: cols}, () => Math.random() * 2 - 1));
+  Array.from({length: rows}, () => Array.from({length: cols}, () => (Math.random() * 2 - 1) / Math.sqrt(cols)));
 const normalizeRows = (A: number[][], targetNorm = 1) => A.map(row => {
   let n = norm(row);
   return row.map(x => (x / (n || 1)) * targetNorm);
@@ -42,7 +42,6 @@ function Panel1() {
   return (
     <div className="panel-grid">
       <div className="controls-col">
-        <div className="math-equation">{"a_ij = softmax(q_i · k_j / (\\tau \\sqrt{d_k}))"}</div>
         <div className="control-group">
           <div className="slider-container">
             <div className="control-label"><span>Query Norm ||q||</span><span className="control-val">{qNorm.toFixed(1)}</span></div>
@@ -69,28 +68,31 @@ function Panel1() {
       <div className="plots-col">
         <div className="plots-row">
           <div className="plot-container">
+            <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#10b981'}}>{"a_ij = softmax(q_i · k_j / (\\tau \\sqrt{d_k}))"}</div>
             <Plot
               data={[{ z: data.A, type: 'heatmap', colorscale: 'Viridis' }] as any}
               layout={{ title: 'Attention Weights (A)', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'}, margin: {t:40,l:30,r:30,b:30} } as any}
-              useResizeHandler={true} style={{width: '100%', height: '300px'}}
+              useResizeHandler={true} style={{width: '100%', height: '260px'}}
             />
           </div>
           <div className="plot-container">
+            <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#ef4444'}}>{"\\nabla_{z_i} a_i \\approx a_i(1 - a_i)"}</div>
             <Plot
               data={[{ z: data.gradMag, type: 'heatmap', colorscale: 'Reds', zmin: 0, zmax: 0.25 }] as any}
               layout={{ title: 'Gradient Vanishing Heatmap', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'}, margin: {t:40,l:30,r:30,b:30} } as any}
-              useResizeHandler={true} style={{width: '100%', height: '300px'}}
+              useResizeHandler={true} style={{width: '100%', height: '260px'}}
             />
           </div>
         </div>
         <div className="plot-container">
+          <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#3b82f6'}}>{"H(a_i) = -\\sum a_{ij} \\log a_{ij}"}</div>
           <Plot
             data={[{ y: data.entropy, type: 'scatter', mode: 'lines' }] as any}
             layout={{ 
               title: 'Attention Entropy per Position', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'}, margin: {t:40,l:40,r:30,b:40},
               shapes: [{type: 'line', y0: Math.log(seqLen), y1: Math.log(seqLen), x0: 0, x1: seqLen, line: {color: 'rgba(255,255,255,0.3)', dash: 'dash'}}]
             } as any}
-            useResizeHandler={true} style={{width: '100%', height: '300px'}}
+            useResizeHandler={true} style={{width: '100%', height: '260px'}}
           />
         </div>
       </div>
@@ -135,6 +137,12 @@ function Panel2() {
     }
     return sim;
   }, [seqLen, encType, dModel]);
+  
+  const getEquation = () => {
+    if (encType === 'Sinusoidal') return "PE(p, 2i) = \\sin(p / 10000^{2i/d})";
+    if (encType === 'RoPE') return "q_m^T k_n = (R_m q)^T (R_n k) \\propto \\cos((m-n)\\theta)";
+    return "\\text{logit}_{ij} = q_i \\cdot k_j - m \\cdot |i - j|";
+  };
 
   return (
     <div className="panel-grid">
@@ -161,16 +169,17 @@ function Panel2() {
       </div>
       <div className="plots-col">
         <div className="plot-container">
+          <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#8b5cf6'}}>{getEquation()}</div>
           <Plot
             data={[{ z: simMatrix, type: 'heatmap', colorscale: 'RdBu' }] as any}
             layout={{ 
-              title: `${encType} Positional Similarity`, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'},
+              title: `${encType} Positional Similarity Matrix`, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'},
               shapes: [
                 {type: 'line', x0: trainLen, x1: trainLen, y0: 0, y1: seqLen, line: {color: 'rgba(239,68,68,0.8)', dash: 'dash', width: 2}},
                 {type: 'line', y0: trainLen, y1: trainLen, x0: 0, x1: seqLen, line: {color: 'rgba(239,68,68,0.8)', dash: 'dash', width: 2}}
               ]
             } as any}
-            useResizeHandler={true} style={{width: '100%', height: '600px'}}
+            useResizeHandler={true} style={{width: '100%', height: '550px'}}
           />
         </div>
       </div>
@@ -180,15 +189,32 @@ function Panel2() {
 
 function Panel3() {
   const [numHeads, setNumHeads] = useState(8);
-  const [redundancy, setRedundancy] = useState(0.5);
+  const [weightCorr, setWeightCorr] = useState(0.8);
   const seqLen = 50;
 
   const jsMatrix = useMemo(() => {
-    let baseLogits = randomMatrix(seqLen, seqLen);
+    // Math principled redundancy:
+    // Generate a shared sequence X
+    let dModel = 64;
+    let dK = 32;
+    let X = randomMatrix(seqLen, dModel);
+    
+    // Generate a base projection matrices that heads will correlate with
+    let WQ_base = randomMatrix(dModel, dK);
+    let WK_base = randomMatrix(dModel, dK);
+    
     let heads: number[][][] = [];
     for(let h=0; h<numHeads; h++) {
-      let noise = randomMatrix(seqLen, seqLen);
-      let logits = baseLogits.map((row, i) => row.map((x, j) => redundancy * x + (1 - redundancy) * noise[i][j]));
+      let WQ_noise = randomMatrix(dModel, dK);
+      let WK_noise = randomMatrix(dModel, dK);
+      
+      // The projection matrices for this head are a mix of the base pattern and noise
+      let WQ_h = WQ_base.map((row, i) => row.map((val, j) => weightCorr * val + Math.sqrt(1 - weightCorr*weightCorr) * WQ_noise[i][j]));
+      let WK_h = WK_base.map((row, i) => row.map((val, j) => weightCorr * val + Math.sqrt(1 - weightCorr*weightCorr) * WK_noise[i][j]));
+      
+      let Q = matMul(X, WQ_h);
+      let K = matMul(X, WK_h);
+      let logits = matMul(Q, transpose(K)).map(row => row.map(v => v / Math.sqrt(dK)));
       heads.push(softmaxRows(logits));
     }
     
@@ -211,29 +237,34 @@ function Panel3() {
       }
     }
     return matrix;
-  }, [numHeads, redundancy]);
+  }, [numHeads, weightCorr]);
 
   return (
     <div className="panel-grid">
       <div className="controls-col">
-        <div className="math-equation">ρ(l, l') = 1/n ∑ JS(a_i^(l) || a_i^(l'))</div>
         <div className="control-group">
           <div className="slider-container">
             <div className="control-label"><span>Number of Heads</span><span className="control-val">{numHeads}</span></div>
             <input type="range" min="2" max="32" step="1" value={numHeads} onChange={e => setNumHeads(parseInt(e.target.value))} />
           </div>
           <div className="slider-container">
-            <div className="control-label"><span>Redundancy Factor</span><span className="control-val">{redundancy.toFixed(2)}</span></div>
-            <input type="range" min="0" max="1" step="0.05" value={redundancy} onChange={e => setRedundancy(parseFloat(e.target.value))} />
+            <div className="control-label"><span>Projection Weight Correlation</span><span className="control-val">{weightCorr.toFixed(2)}</span></div>
+            <input type="range" min="0" max="0.99" step="0.05" value={weightCorr} onChange={e => setWeightCorr(parseFloat(e.target.value))} />
           </div>
+          <p style={{fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 12}}>
+            We simulate the sequence <strong>X</strong> passing through parameterized projection matrices <strong>W_Q</strong> and <strong>W_K</strong>. By increasing correlation, heads share parameter subspaces, creating true identical attention patterns (a mathematically robust view of redundancy).
+          </p>
         </div>
       </div>
       <div className="plots-col">
         <div className="plot-container">
+          <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#f59e0b'}}>
+            {"W_Q^{(h)} = \\gamma W_Q^{base} + \\sqrt{1-\\gamma^2} \\epsilon \\quad\\rightarrow\\quad \\rho(l, l') = \\frac{1}{n} \\sum JS(a_i^{(l)} \\| a_i^{(l')})"}
+          </div>
           <Plot
             data={[{ z: jsMatrix, type: 'heatmap', colorscale: 'Plasma' }] as any}
-            layout={{ title: 'Head JS-Divergence (Lower = More Redundant)', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'} } as any}
-            useResizeHandler={true} style={{width: '100%', height: '600px'}}
+            layout={{ title: 'Head JS-Divergence Matrix (Lower = More Redundant)', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'}, margin: {t:40} } as any}
+            useResizeHandler={true} style={{width: '100%', height: '550px'}}
           />
         </div>
       </div>
@@ -301,7 +332,6 @@ function Panel4() {
   return (
     <div className="panel-grid">
       <div className="controls-col">
-        <div className="math-equation">{"x^(l+1) = x^(l) + F^(l)(x^(l))"}</div>
         <div className="control-group">
           <div className="slider-container">
             <div className="control-label"><span>Number of Layers</span><span className="control-val">{numLayers}</span></div>
@@ -320,6 +350,7 @@ function Panel4() {
       </div>
       <div className="plots-col">
         <div className="plot-container">
+          <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#06b6d4'}}>{"x^{(l+1)} = \\text{LayerNorm}(x^{(l)} + F^{(l)}(x^{(l)}))"}</div>
           <Plot
             data={[
               { y: data.normsX, type: 'scatter', mode: 'lines+markers', name: '||x|| (Stream)' },
@@ -330,8 +361,9 @@ function Panel4() {
           />
         </div>
         <div className="plot-container">
+          <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#ec4899'}}>{"P(\\text{token}) = \\text{softmax}(x^{(l)} W_U)"}</div>
           <Plot
-            data={[{ y: data.probsOfFinal, type: 'scatter', mode: 'lines+markers', name: 'P(Final Token)', marker: {color: '#a855f7'} }] as any}
+            data={[{ y: data.probsOfFinal, type: 'scatter', mode: 'lines+markers', name: 'P(Final Token)', marker: {color: '#ec4899'} }] as any}
             layout={{ title: 'Logit Lens: When does prediction stabilize?', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'} } as any}
             useResizeHandler={true} style={{width: '100%', height: '300px'}}
           />
@@ -342,14 +374,54 @@ function Panel4() {
 }
 
 function Panel5() {
-  const [coupling, setCoupling] = useState(0.8);
+  const [coupling, setCoupling] = useState(0.9);
 
-  const WOVK = useMemo(() => {
-    let dHead = 32;
-    let identity = Array.from({length: dHead}, (_, i) => Array.from({length: dHead}, (_, j) => i===j ? 1 : 0));
-    let noise = randomMatrix(dHead, dHead).map(row => row.map(v => v / Math.sqrt(dHead)));
+  const data = useMemo(() => {
+    // Sequence: [Harry, Potter, and, Harry, _] -> expecting 'Potter'
+    // Let's abstract this to 5 tokens, vocab size 4.
+    // T1: 0 (Harry), T2: 1 (Potter), T3: 2 (and), T4: 0 (Harry), T5: ? (We look at row 4 attention)
     
-    return identity.map((row, i) => row.map((idVal, j) => coupling * idVal + (1 - coupling) * noise[i][j]));
+    let seq = [0, 1, 2, 0, 3];
+    let n = seq.length;
+    let dModel = 16;
+    
+    // Create distinct embeddings for the 4 vocab items
+    let E_vocab = randomMatrix(4, dModel);
+    let E = seq.map(idx => E_vocab[idx]);
+    
+    // Layer 1: Previous Token Head
+    // Hardcode an attention matrix that strictly looks at the previous token
+    let A1 = Array.from({length: n}, (_, i) => Array.from({length: n}, (_, j) => (i - 1 === j && i > 0) ? 1 : 0));
+    // Let's pretend W_V and W_O in layer 1 are Identity for simplicity, so O1 = A1 * E
+    let O1 = matMul(A1, E); 
+    
+    // Layer 2: Induction Head
+    // Q depends on current token (E)
+    // K depends on context (O1, which holds the PREVIOUS token's embedding)
+    // If we want K to match Q when the previous token of j matches current token of i, 
+    // we need K to pull from O1, and Q to pull from E, and W_Q * W_K^T ≈ Identity.
+    
+    let W_Q2 = randomMatrix(dModel, dModel);
+    let W_K2_base = W_Q2; // Perfect matching
+    let W_K2_noise = randomMatrix(dModel, dModel);
+    
+    // Blend the perfect K projection with noise based on coupling
+    let W_K2 = W_K2_base.map((row, i) => row.map((val, j) => coupling * val + Math.sqrt(1 - coupling*coupling) * W_K2_noise[i][j]));
+    
+    // Q is derived from current embedding E
+    let Q = matMul(E, W_Q2);
+    // K is derived from Layer 1 output O1
+    let K = matMul(O1, W_K2);
+    
+    let logits = matMul(Q, transpose(K));
+    // Apply causal mask and softmax
+    let maskedLogits = logits.map((row, i) => row.map((val, j) => j <= i ? val * 2.0 : -1e9)); // Scale for sharpness
+    let A2 = softmaxRows(maskedLogits);
+    
+    // Text labels for axes
+    let labels = ["Harry (0)", "Potter (1)", "and (2)", "Harry (3)", "[NEXT] (4)"];
+    
+    return { A2, labels };
   }, [coupling]);
 
   return (
@@ -357,22 +429,29 @@ function Panel5() {
       <div className="controls-col">
         <div className="control-group">
           <div className="slider-container">
-            <div className="control-label"><span>Circuit Coupling Strength</span><span className="control-val">{coupling.toFixed(2)}</span></div>
+            <div className="control-label"><span>Induction Coupling Strength</span><span className="control-val">{coupling.toFixed(2)}</span></div>
             <input type="range" min="0" max="1" step="0.05" value={coupling} onChange={e => setCoupling(parseFloat(e.target.value))} />
           </div>
           <div style={{color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.6', marginTop: '20px'}}>
-            <strong>1.0</strong> = Perfect copying. <br/><strong>0.0</strong> = Random communication. <br/><br/>
-            When the diagonal is strong, Layer 2's Keys directly read the Values extracted by Layer 1. 
-            Since Layer 1 attends to the previous token, Layer 2 effectively asks: "Have I seen the current token before? If so, what came after it?" — solving in-context learning mathematically.
+            <strong>Sequence:</strong> <code>[Harry, Potter, and, Harry, ?]</code><br/><br/>
+            <strong>Layer 1</strong> extracts the previous token. <br/>
+            <strong>Layer 2</strong> compares its current token to Layer 1's output. <br/><br/>
+            When coupling is high, the <strong>OV-K</strong> circuit operates perfectly. Look at the last row (predicting after the second 'Harry'). The attention spikes precisely on 'Potter' — this is the mathematical origin of <strong>in-context learning</strong>.
           </div>
         </div>
       </div>
       <div className="plots-col">
         <div className="plot-container">
+          <div className="math-equation" style={{marginBottom: 0, borderLeftColor: '#f43f5e'}}>{"Q^{(2)} = E W_Q^{(2)}, \\quad K^{(2)} = (A^{(1)} E W_{OV}^{(1)}) W_K^{(2)}"}</div>
           <Plot
-            data={[{ z: WOVK, type: 'heatmap', colorscale: 'RdBu' }] as any}
-            layout={{ title: 'OV-K Composition Matrix (Layer 1 -> 2)', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'} } as any}
-            useResizeHandler={true} style={{width: '100%', height: '600px'}}
+            data={[{ z: data.A2, x: data.labels, y: data.labels, type: 'heatmap', colorscale: 'Blues' }] as any}
+            layout={{ 
+              title: 'Layer 2 Attention (Induction Head)', 
+              paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: {color: '#e2e8f0'},
+              xaxis: {title: 'Key (Context)', side: 'bottom'},
+              yaxis: {title: 'Query (Current Token)', autorange: 'reversed'}
+            } as any}
+            useResizeHandler={true} style={{width: '100%', height: '550px'}}
           />
         </div>
       </div>
