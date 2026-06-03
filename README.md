@@ -34,9 +34,4 @@ npm install
 npm run dev
 ```
 
-## Deployment (Vercel)
 
-This repository is built as a standard React single-page application using Vite. It is instantly deployable on Vercel:
-1. Connect this repository to your Vercel account.
-2. The framework preset should automatically be detected as **Vite**.
-3. Deploy! The Build command will automatically be `npm run build` and output directory `dist`.
